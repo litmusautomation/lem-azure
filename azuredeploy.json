@@ -1,0 +1,481 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "Litmus Edge Manager Deploy Template",
+      "version": "1.0.0"
+    },
+    "description": "This template deploys Litmus Edge Manager (LEM) on Azure. LEM is an industrial IoT edge management platform.",
+    "author": "Litmus Automation"
+  },
+  "parameters": {
+    "projectName": {
+      "type": "string",
+      "defaultValue": "lem",
+      "minLength": 3,
+      "maxLength": 10,
+      "metadata": {
+        "description": "A name prefix used for generating resource names (3-10 alphanumeric characters)."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "The Azure region where resources will be deployed."
+      }
+    },
+    "vmSize": {
+      "type": "string",
+      "defaultValue": "Standard_B4ms",
+      "allowedValues": [
+        "Standard_B4ms",
+        "Standard_B8ms",
+        "Standard_D4s_v5",
+        "Standard_D8s_v5",
+        "Standard_E4s_v5",
+        "Standard_E8s_v5"
+      ],
+      "metadata": {
+        "description": "The size of the virtual machine. Standard_B4ms is the minimum recommended configuration."
+      }
+    },
+    "adminUsername": {
+      "type": "string",
+      "defaultValue": "lemadmin",
+      "metadata": {
+        "description": "Username for the VM administrator account."
+      }
+    },
+    "sshPublicKey": {
+      "type": "securestring",
+      "metadata": {
+        "description": "SSH public key for the VM administrator account."
+      }
+    },
+    "osDiskSizeGB": {
+      "type": "int",
+      "defaultValue": 160,
+      "minValue": 128,
+      "maxValue": 1024,
+      "metadata": {
+        "description": "The size of the OS disk in GB."
+      }
+    },
+    "virtualNetworkNewOrExisting": {
+      "type": "string",
+      "defaultValue": "new",
+      "allowedValues": [
+        "new",
+        "existing"
+      ],
+      "metadata": {
+        "description": "Specify whether to create a new or use an existing virtual network."
+      }
+    },
+    "virtualNetworkName": {
+      "type": "string",
+      "defaultValue": "lem-vnet",
+      "metadata": {
+        "description": "Name of the virtual network."
+      }
+    },
+    "virtualNetworkResourceGroup": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().name]",
+      "metadata": {
+        "description": "Resource group of the virtual network (only used when using existing VNet)."
+      }
+    },
+    "virtualNetworkAddressPrefix": {
+      "type": "string",
+      "defaultValue": "10.0.0.0/16",
+      "metadata": {
+        "description": "The address prefix for the virtual network (only used when creating new VNet)."
+      }
+    },
+    "subnetName": {
+      "type": "string",
+      "defaultValue": "lem-subnet",
+      "metadata": {
+        "description": "Name of the subnet."
+      }
+    },
+    "subnetAddressPrefix": {
+      "type": "string",
+      "defaultValue": "10.0.0.0/24",
+      "metadata": {
+        "description": "The address prefix for the subnet (only used when creating new VNet)."
+      }
+    },
+    "publicIpNewOrExistingOrNone": {
+      "type": "string",
+      "defaultValue": "new",
+      "allowedValues": [
+        "new",
+        "existing",
+        "none"
+      ],
+      "metadata": {
+        "description": "Specify whether to create a new public IP, use an existing one, or deploy with private IP only."
+      }
+    },
+    "publicIpName": {
+      "type": "string",
+      "defaultValue": "lem-pip",
+      "metadata": {
+        "description": "Name of the public IP address."
+      }
+    },
+    "publicIpResourceGroup": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().name]",
+      "metadata": {
+        "description": "Resource group of the public IP address (only used when using existing public IP)."
+      }
+    },
+    "vmTags": {
+      "type": "object",
+      "defaultValue": {},
+      "metadata": {
+        "description": "Tags for the virtual machine."
+      }
+    },
+    "networkSecurityGroupTags": {
+      "type": "object",
+      "defaultValue": {},
+      "metadata": {
+        "description": "Tags for the network security group."
+      }
+    },
+    "virtualNetworkTags": {
+      "type": "object",
+      "defaultValue": {},
+      "metadata": {
+        "description": "Tags for the virtual network."
+      }
+    },
+    "publicIpTags": {
+      "type": "object",
+      "defaultValue": {},
+      "metadata": {
+        "description": "Tags for the public IP address."
+      }
+    },
+    "networkInterfaceTags": {
+      "type": "object",
+      "defaultValue": {},
+      "metadata": {
+        "description": "Tags for the network interface."
+      }
+    }
+  },
+  "variables": {
+    "vmName": "[format('{0}-vm', parameters('projectName'))]",
+    "networkInterfaceName": "[format('{0}-nic', parameters('projectName'))]",
+    "networkSecurityGroupName": "[format('{0}-nsg', parameters('projectName'))]",
+    "linuxConfiguration": {
+      "disablePasswordAuthentication": true,
+      "ssh": {
+        "publicKeys": [
+          {
+            "path": "[format('/home/{0}/.ssh/authorized_keys', parameters('adminUsername'))]",
+            "keyData": "[parameters('sshPublicKey')]"
+          }
+        ]
+      }
+    },
+    "createNewVnet": "[equals(parameters('virtualNetworkNewOrExisting'), 'new')]",
+    "createNewPublicIp": "[equals(parameters('publicIpNewOrExistingOrNone'), 'new')]",
+    "usePublicIp": "[not(equals(parameters('publicIpNewOrExistingOrNone'), 'none'))]",
+    "subnetId": "[if(variables('createNewVnet'), resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworkName'), parameters('subnetName')), resourceId(parameters('virtualNetworkResourceGroup'), 'Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworkName'), parameters('subnetName')))]",
+    "publicIpId": "[if(variables('createNewPublicIp'), resourceId('Microsoft.Network/publicIPAddresses', parameters('publicIpName')), resourceId(parameters('publicIpResourceGroup'), 'Microsoft.Network/publicIPAddresses', parameters('publicIpName')))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "apiVersion": "2023-11-01",
+      "name": "[variables('networkSecurityGroupName')]",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('networkSecurityGroupTags')]",
+      "properties": {
+        "securityRules": [
+          {
+            "name": "Allow-HTTP",
+            "properties": {
+              "description": "Allow HTTP traffic for web interface",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "80",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 100,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "Allow-HTTPS",
+            "properties": {
+              "description": "Allow HTTPS traffic for secure web interface",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "443",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 110,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "Allow-LEM-Admin",
+            "properties": {
+              "description": "Allow LEM administration console access",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "8446",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 120,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "Allow-Edge-remote",
+            "properties": {
+              "description": "Allow remote edge connections",
+              "protocol": "Udp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "51820",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 130,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "Allow-MQTT-SSL",
+            "properties": {
+              "description": "Allow secure MQTT for IoT device communication",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "8883",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 140,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "Allow-NTP",
+            "properties": {
+              "description": "Allow NTP for time synchronization",
+              "protocol": "Udp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "123",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 150,
+              "direction": "Inbound"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "condition": "[variables('createNewPublicIp')]",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "apiVersion": "2023-11-01",
+      "name": "[parameters('publicIpName')]",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('publicIpTags')]",
+      "sku": {
+        "name": "Standard",
+        "tier": "Regional"
+      },
+      "properties": {
+        "publicIPAllocationMethod": "Static",
+        "publicIPAddressVersion": "IPv4",
+        "idleTimeoutInMinutes": 4
+      }
+    },
+    {
+      "condition": "[variables('createNewVnet')]",
+      "type": "Microsoft.Network/virtualNetworks",
+      "apiVersion": "2023-11-01",
+      "name": "[parameters('virtualNetworkName')]",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('virtualNetworkTags')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkSecurityGroups', variables('networkSecurityGroupName'))]"
+      ],
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[parameters('virtualNetworkAddressPrefix')]"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "[parameters('subnetName')]",
+            "properties": {
+              "addressPrefix": "[parameters('subnetAddressPrefix')]",
+              "networkSecurityGroup": {
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('networkSecurityGroupName'))]"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Network/networkInterfaces",
+      "apiVersion": "2023-11-01",
+      "name": "[variables('networkInterfaceName')]",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('networkInterfaceTags')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/publicIPAddresses', parameters('publicIpName'))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', parameters('virtualNetworkName'))]",
+        "[resourceId('Microsoft.Network/networkSecurityGroups', variables('networkSecurityGroupName'))]"
+      ],
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "publicIPAddress": "[if(variables('usePublicIp'), createObject('id', variables('publicIpId')), null())]",
+              "subnet": {
+                "id": "[variables('subnetId')]"
+              }
+            }
+          }
+        ],
+        "networkSecurityGroup": "[if(variables('createNewVnet'), null(), createObject('id', resourceId('Microsoft.Network/networkSecurityGroups', variables('networkSecurityGroupName'))))]"
+      }
+    },
+    {
+      "type": "Microsoft.Compute/virtualMachines",
+      "apiVersion": "2024-03-01",
+      "name": "[variables('vmName')]",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('vmTags')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkInterfaces', variables('networkInterfaceName'))]"
+      ],
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "plan": {
+        "name": "lem-azure",
+        "publisher": "litmusautomation1582760223280",
+        "product": "litmusedgemanager"
+      },
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[parameters('vmSize')]"
+        },
+        "osProfile": {
+          "computerName": "[variables('vmName')]",
+          "adminUsername": "[parameters('adminUsername')]",
+          "linuxConfiguration": "[variables('linuxConfiguration')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "litmusautomation1582760223280",
+            "offer": "litmusedgemanager",
+            "sku": "lem-azure",
+            "version": "latest"
+          },
+          "osDisk": {
+            "name": "[format('{0}-osdisk', variables('vmName'))]",
+            "createOption": "FromImage",
+            "diskSizeGB": "[parameters('osDiskSizeGB')]",
+            "managedDisk": {
+              "storageAccountType": "Premium_LRS"
+            },
+            "caching": "ReadWrite",
+            "deleteOption": "Delete"
+          }
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('networkInterfaceName'))]",
+              "properties": {
+                "deleteOption": "Delete"
+              }
+            }
+          ]
+        },
+        "diagnosticsProfile": {
+          "bootDiagnostics": {
+            "enabled": true
+          }
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "vmName": {
+      "type": "string",
+      "value": "[variables('vmName')]",
+      "metadata": {
+        "description": "The name of the deployed virtual machine."
+      }
+    },
+    "privateIpAddress": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Network/networkInterfaces', variables('networkInterfaceName')), '2023-11-01').ipConfigurations[0].properties.privateIPAddress]",
+      "metadata": {
+        "description": "The private IP address of the LEM instance."
+      }
+    },
+    "publicIpAddress": {
+      "condition": "[variables('usePublicIp')]",
+      "type": "string",
+      "value": "[if(variables('createNewPublicIp'), reference(resourceId('Microsoft.Network/publicIPAddresses', parameters('publicIpName')), '2023-11-01').ipAddress, reference(resourceId(parameters('publicIpResourceGroup'), 'Microsoft.Network/publicIPAddresses', parameters('publicIpName')), '2023-11-01').ipAddress)]",
+      "metadata": {
+        "description": "The public IP address of the LEM instance."
+      }
+    },
+    "adminConsoleUrl": {
+      "condition": "[variables('usePublicIp')]",
+      "type": "string",
+      "value": "[format('https://{0}:8446', if(variables('createNewPublicIp'), reference(resourceId('Microsoft.Network/publicIPAddresses', parameters('publicIpName')), '2023-11-01').ipAddress, reference(resourceId(parameters('publicIpResourceGroup'), 'Microsoft.Network/publicIPAddresses', parameters('publicIpName')), '2023-11-01').ipAddress))]",
+      "metadata": {
+        "description": "The URL to access the LEM administration console."
+      }
+    },
+    "webInterfaceUrl": {
+      "condition": "[variables('usePublicIp')]",
+      "type": "string",
+      "value": "[format('https://{0}', if(variables('createNewPublicIp'), reference(resourceId('Microsoft.Network/publicIPAddresses', parameters('publicIpName')), '2023-11-01').ipAddress, reference(resourceId(parameters('publicIpResourceGroup'), 'Microsoft.Network/publicIPAddresses', parameters('publicIpName')), '2023-11-01').ipAddress))]",
+      "metadata": {
+        "description": "The URL to access the LEM web interface."
+      }
+    },
+    "adminUsername": {
+      "type": "string",
+      "value": "[parameters('adminUsername')]",
+      "metadata": {
+        "description": "The admin username for SSH access."
+      }
+    },
+    "sshCommand": {
+      "condition": "[variables('usePublicIp')]",
+      "type": "string",
+      "value": "[format('ssh {0}@{1}', parameters('adminUsername'), if(variables('createNewPublicIp'), reference(resourceId('Microsoft.Network/publicIPAddresses', parameters('publicIpName')), '2023-11-01').ipAddress, reference(resourceId(parameters('publicIpResourceGroup'), 'Microsoft.Network/publicIPAddresses', parameters('publicIpName')), '2023-11-01').ipAddress))]",
+      "metadata": {
+        "description": "SSH command to connect to the VM."
+      }
+    }
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "projectName": {
+      "value": "lem"
+    },
+    "vmSize": {
+      "value": "Standard_B4ms"
+    },
+    "adminUsername": {
+      "value": "lemadmin"
+    },
+    "sshPublicKey": {
+      "value": "ssh-rsa AAAA..."
+    },
+    "virtualNetworkNewOrExisting": {
+      "value": "new"
+    },
+    "virtualNetworkName": {
+      "value": "lem-vnet"
+    },
+    "virtualNetworkAddressPrefix": {
+      "value": "10.0.0.0/16"
+    },
+    "subnetName": {
+      "value": "lem-subnet"
+    },
+    "subnetAddressPrefix": {
+      "value": "10.0.0.0/24"
+    },
+    "publicIpNewOrExistingOrNone": {
+      "value": "new"
+    },
+    "publicIpName": {
+      "value": "lem-pip"
+    },
+    "vmTags": {
+      "value": {
+        "environment": "production",
+        "application": "litmus-edge-manager"
+      }
+    },
+    "networkSecurityGroupTags": {
+      "value": {}
+    },
+    "virtualNetworkTags": {
+      "value": {}
+    },
+    "publicIpTags": {
+      "value": {}
+    },
+    "networkInterfaceTags": {
+      "value": {}
+    }
+  }
+}
