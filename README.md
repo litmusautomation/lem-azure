@@ -1,6 +1,6 @@
 # Litmus Edge Manager - Deploy to Azure
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fdmzaytsev%2Ftest1%2Fmain%2Fazuredeploy.json)
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Flitmusautomation%2Flem-azure%2Fmain%2Fazuredeploy.json)
 
 ## Overview
 
